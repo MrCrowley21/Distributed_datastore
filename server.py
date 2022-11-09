@@ -1,11 +1,5 @@
-import threading
-import logging
-import socket
-from time import sleep
 from flask import Flask, request, jsonify
 
-from config import *
-from Components_logic.server_communication import *
 from Components_logic.storage import *
 
 # initialize the logger mode
@@ -17,6 +11,7 @@ server_communication = ServerCommunication()
 storage = Storage()
 
 
+# http communication with clients
 @app.route('/', methods=['POST', 'GET', 'DELETE'])
 def receive_client_request():
     if request.method == 'POST':
@@ -36,11 +31,9 @@ def receive_client_request():
         return 'Requested data has been deleted'
 
 
+# initiate server
 if __name__ == "__main__":
+    # set partition leader
     threading.Thread(target=server_communication.set_partition_leader, args=(app,)).start()
+    # initiate data receiving
     threading.Thread(target=server_communication.receive_data, args=(storage,)).start()
-    # threading.Thread(target=server_communication.set_partition_leader, args=(app,)).start()
-    # threading.Thread(target=lambda: app.run(port=port, host="0.0.0.0", debug=True, use_reloader=False)).start()
-    # while True:
-    #     data = input()
-    #     server_communication.send_data(data, 5000)
