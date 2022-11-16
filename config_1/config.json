@@ -1,0 +1,11 @@
+{
+  "server_id" : 1,
+  "ip" : "172.26.0.3",
+  "port" : 8001,
+  "udp_port" : 5001,
+  "buffer_size" : 1024,
+  "ports_to_send" : [
+                      5000,
+                      5002
+                    ]
+}

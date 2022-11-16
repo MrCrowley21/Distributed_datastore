@@ -7,7 +7,7 @@ services:
         config: config
     ports:
       - "8000:8000"
-      - "5000:5000"
+      - "5000:5000/udp"
   data-store-1:
     build:
       context: .
@@ -16,7 +16,7 @@ services:
         config: config_1
     ports:
       - "8001:8001"
-      - "5001:5001"
+      - "5001:5001/udp"
 
   data-store-2:
     build:
@@ -26,7 +26,7 @@ services:
         config: config_2
     ports:
       - "8002:8002"
-      - "5002:5002"
+      - "5002:5002/udp"
 
 networks:
   default:
