@@ -17,7 +17,7 @@ def receive_client_request():
     if request.method == 'POST':
         received_data = request.json
         logging.info(f'Receiving new data to create or update')
-        threading.Thread(target=storage.create_update_data, args=(received_data,)).start()
+        threading.Thread(target=storage.create_update_data, args=(received_data, server_communication.ports_to_send,)).start()
         return jsonify(received_data)
     elif request.method == 'GET':
         requested_key = request.json
@@ -27,13 +27,14 @@ def receive_client_request():
     elif request.method == 'DELETE':
         data_to_delete = request.json
         logging.info(f'Some data requested to be deleted')
-        threading.Thread(target=storage.delete_data, args=(data_to_delete['key'],)).start()
+        threading.Thread(target=storage.delete_data, args=(data_to_delete['key'], server_communication.ports_to_send,)).start()
         return 'Requested data has been deleted'
 
 
 # initiate server
 if __name__ == "__main__":
-    # set partition leader
-    threading.Thread(target=server_communication.set_partition_leader, args=(app,)).start()
     # initiate data receiving
     threading.Thread(target=server_communication.receive_data, args=(storage,)).start()
+    # set partition leader
+    threading.Thread(target=server_communication.set_partition_leader, args=(app,)).start()
+

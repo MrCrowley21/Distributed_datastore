@@ -13,7 +13,7 @@ class Storage:
         self.storage = {}  # the actual storage
 
     # create or update data request
-    def create_update_data(self, data):
+    def create_update_data(self, data, ports_to_send):
         # commit modifications
         key = data['key']
         self.storage[key] = data['data']
@@ -34,7 +34,7 @@ class Storage:
             return 'No data'
 
     # delete data request
-    def delete_data(self, key):
+    def delete_data(self, key, ports_to_send):
         # in case data exists
         try:
             # delete requested data
