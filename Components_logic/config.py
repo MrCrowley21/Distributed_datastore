@@ -10,5 +10,5 @@ class Config:
 
     def extract_data(self):
         data = self.__get_data()
-        return data["server_id"], data["ip"], data["port"], data["udp_port"], \
-               data["buffer_size"], data["ports_to_send"]
+        return data["server_id"], data["address"], data["state"], data["port"], data["udp_port"], data["tcp_port"], \
+               data["buffer_size"], data["udp_ports_to_send"], data["tcp_ports_to_send"]

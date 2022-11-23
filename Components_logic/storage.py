@@ -1,7 +1,6 @@
 import logging
 import threading
 
-from Components_logic.server_communication import *
 
 # initialize the logger mode
 logging.basicConfig(level=logging.DEBUG)
@@ -12,15 +11,24 @@ class Storage:
     def __init__(self):
         self.storage = {}  # the actual storage
 
-    # create or update data request
-    def create_update_data(self, data, ports_to_send):
+    # create or update data request general schema
+    def __create_update_data(self, data, logging_info):
         # commit modifications
         key = data['key']
         self.storage[key] = data['data']
-        logging.info(f'New data has been updated/created. Current stored data:\n{self.storage}')
-        # send modifications to all partitions
-        for destination_port in ports_to_send:
-            threading.Thread(target=ServerCommunication().send_data, args=(self.storage, destination_port)).start()
+        logging.info(f'{logging_info} Current stored data:\n{self.storage}')
+
+    # create data in data storage
+    def create_data(self, data):
+        # commit modifications
+        logging_info = 'New data has been created.'
+        self.__create_update_data(data, logging_info)
+
+    # update requested data in data storage
+    def update_data(self, data):
+        # commit modifications
+        logging_info = 'The datastorage date has been updated.'
+        self.__create_update_data(data, logging_info)
 
     # get data request
     def get_data(self, key):
@@ -34,15 +42,13 @@ class Storage:
             return 'No data'
 
     # delete data request
-    def delete_data(self, key, ports_to_send):
+    def delete_data(self, data):
         # in case data exists
         try:
+            key = data["key"]
             # delete requested data
             del self.storage[key]
             logging.info(f'Data has been deleted. Current stored data:\n{self.storage}')
-            # send modifications to all partitions
-            for destination_port in ports_to_send:
-                threading.Thread(target=ServerCommunication().send_data, args=(self.storage, destination_port)).start()
         # in case no such data
         except KeyError:
             logging.info('Nothing to delete')
