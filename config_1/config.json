@@ -1,11 +1,17 @@
 {
   "server_id" : 1,
-  "ip" : "172.26.0.3",
+  "address" : "",
+  "state": "follower",
   "port" : 8001,
   "udp_port" : 5001,
+  "tcp_port" : 5011,
   "buffer_size" : 1024,
-  "ports_to_send" : [
+  "udp_ports_to_send" : [
                       5000,
                       5002
+                    ],
+  "tcp_ports_to_send" : [
+                      5010,
+                      5012
                     ]
 }
