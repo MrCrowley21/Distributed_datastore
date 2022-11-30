@@ -26,12 +26,17 @@ class ServerCommunication:
         self.partition_leader_exists = False  # the state if partition leader exists
         self.candidates_id = []  # the ids of the candidates
         self.active_services = []  # list of active services
-        self.heartbeat = 2  # define the heartbeat of the server
+        self.heartbeat = 3  # define the heartbeat of the server
         self.partition_leader_checked = True  # define if partition leader was checked
         self.server_id, self.address, self.state, self.port, self.udp_port, self.tcp_port, self.buffer_size, \
-            self.udp_ports_to_send, self.tcp_ports_to_send = Config().extract_data()
-        self.data_location = {}
-        self.lock = Lock()
+        self.udp_ports_to_send, self.tcp_ports_to_send, self.addresses = Config().extract_data()
+        self.get_data = {}  # the data gotten by a server
+        self.data_location = {}  # the location of the data
+        self.lock = Lock()  # locking mechanism
+        self.server_registrations = [[i, 0] for i in
+                                     self.tcp_ports_to_send]  # the number of registrations contained in each server
+        self.server_registrations.append([self.tcp_port, 0])
+        self.used_keys = []  # list of keys that are not available
 
     # send data through UDP
     def send_udp_data(self, data, udp_to_send):
@@ -52,8 +57,6 @@ class ServerCommunication:
     def receive_udp_data(self):
         # initiate UDP socket
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # hostname = socket.gethostname()
-        # self.address = socket.gethostbyname(hostname)[:-1] + '1'
         udp_socket.bind(('', self.udp_port))
         # always receiving
         while True:
@@ -65,22 +68,27 @@ class ServerCommunication:
             logging.info(f'Receiving UDP package from another server...')
             logging.info(f'Received: {data}')
             try:
-                port = data["port"]
-                method = data["method"]
-                data_store_data = data["data"]
-                self.resolve_request(method, data_store_data, port)
+                self.resolve_request(data)
             #  if any other data sent through UDP
             except:
-                logging.info(f'Something went wrong...')
+                logging.info(f'UDP receive Something went wrong...')
 
+    # Dual Writes
     def distribute_data(self, method, data, port):
+        data["port"] = self.tcp_port
         if method == 'POST':
             try:
+                data["method"] = 'POST'
                 key = data["key"]
-                self.data_location[key] = []
-                to_post = random.sample(self.active_services, len(self.tcp_ports_to_send) // 2 + 1)
+                self.used_keys.append(key)
+                self.data_location[str(key)] = []
+                self.server_registrations.sort(key=lambda x: x[1])
+                to_post = []
+                for j in range(len(self.tcp_ports_to_send) // 2 + 1):
+                    to_post.append(self.server_registrations[j][0])
+                    self.server_registrations[j][1] += 1
                 for port in to_post:
-                    self.data_location[key].append(port)
+                    self.data_location[str(key)].append(port)
                     if port != self.tcp_port:
                         self.send_udp_data(data, port - 10)
                     else:
@@ -89,46 +97,63 @@ class ServerCommunication:
                 logging.info(f'Something went wrong')
         elif method == 'PUT':
             try:
+                data["method"] = 'PUT'
                 key = data["key"]
-                for port in self.data_location[key]:
+                for port in self.data_location[str(key)]:
                     if port != self.tcp_port and self.tcp_port in self.active_services:
                         self.send_udp_data(data, port - 10)
                     else:
                         self.storage.update_data(data)
             except:
-                logging.info(f'Something went wrong')
+                logging.info(f'Distribution PUT Something went wrong')
         elif method == 'DELETE':
             try:
+                data["method"] = 'DELETE'
                 key = data["key"]
-                for port in self.data_location[key]:
+                for port in self.data_location[str(key)]:
                     if port != self.tcp_port and self.tcp_port in self.active_services:
                         self.send_udp_data(data, port - 10)
                     else:
+                        self.lock.acquire()
                         self.storage.delete_data(data)
+                        self.lock.release()
+                self.used_keys.remove(key)
             except:
-                logging.info(f'Something went wrong')
+                logging.info(f'Distribution DELETE Something went wrong')
         elif method == 'GET':
             try:
+                data["method"] = 'GET'
                 key = data["key"]
-                for port in self.data_location[key]:
+                for port in self.data_location[str(key)]:
                     if port != self.tcp_port and self.tcp_port in self.active_services:
                         self.send_udp_data(data, port - 10)
+                        while True:
+                            if port in self.get_data:
+                                gotten_data = self.get_data[port]
+                                self.get_data.pop(port)
+                                return gotten_data
                     else:
-                        return self.storage.get_data(data)
-                    break
+                        gotten_data = self.storage.get_data(data)
+                        return gotten_data
             except:
-                logging.info(f'Something went wrong')
+                logging.info(f'Distribution Something went wrong')
 
-    def resolve_request(self, method, data, port):
-        if method == 'POST':
+    def resolve_request(self, data):
+        self.lock.acquire()
+        if data["method"] == 'POST':
             self.storage.create_data(data)
-        elif method == 'PUT':
+        elif data["method"] == 'PUT':
             self.storage.update_data(data)
-        elif method == 'DELETE':
+        elif data["method"] == 'DELETE':
             self.storage.delete_data(data)
-        elif method == 'GET':
-            data_to_send = self.storage.get_data(data)
-            self.establish_tcp_connection(data_to_send, port)
+        elif data["method"] == 'GET':
+            data_to_send = {}
+            data_to_send["data"] = self.storage.get_data(data)
+            data_to_send["port"] = self.tcp_port
+            data_to_send["method"] = 'GET'
+            self.establish_tcp_connection(data_to_send, data["port"])
+        self.lock.release()
+        logging.info(f'{self.tcp_port}, {self.storage.storage}')
 
     def establish_tcp_connection(self, data, tcp_port):
         logging.info(f'Trying to establish TCP connection')
@@ -138,8 +163,6 @@ class ServerCommunication:
             self.address = socket.gethostbyname(hostname)[:-1] + '1'
         try:
             tcp_socket.connect((self.address, tcp_port))
-            # tcp_socket.listen()
-            # conn, addr = tcp_socket.accept()
             logging.info(f'Data sent over TCP')
             data = dumps(data).encode('utf-8')
             tcp_socket.sendall(data)
@@ -148,7 +171,7 @@ class ServerCommunication:
             self.active_services.append(tcp_port)
             self.lock.release()
         except:
-            logging.info(f'Something went wrong')
+            logging.info(f'TCP Something went wrong')
 
     def receive_tcp_data(self):
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -168,7 +191,7 @@ class ServerCommunication:
                 conn.close()
 
     def check_received_tcp_data(self, data):
-        logging.info('Distributing the data')
+        logging.info(f'Distributing the data {data}')
         if 'candidate_id' in data:
             self.lock.acquire()
             self.candidates_id.append(data['candidate_id'])
@@ -177,6 +200,22 @@ class ServerCommunication:
                 threading.Thread(target=self.find_partition_leader).start()
         elif 'leader' in data:
             self.partition_leader_exists = True
+        elif 'method' in data:
+            self.get_data[data["port"]] = data["data"]
+            logging.info(f'{data["port"], data["data"]}')
+        elif "data_location" in data:
+            self.lock.acquire()
+            self.data_location.clear()
+            self.data_location = deepcopy(data["data_location"])
+            self.lock.release()
+        elif "sync" in data:
+            logging.info(f'Sending data for synchronization...')
+            for port in self.tcp_ports_to_send:
+                to_send = {"port": self.tcp_port, "storage": self.storage.storage}
+                self.establish_tcp_connection(to_send, port)
+        elif "storage" in data:
+            logging.info(f'Receiving data for synchronization...')
+            threading.Thread(target=self.synchronize_data, args=(data,)).start()
         self.partition_leader_checked = True
 
     # find the partition leader if exist or set the existing one
@@ -195,9 +234,6 @@ class ServerCommunication:
             self.is_partition_leader = True
             self.partition_leader_exists = True
             logging.info(f'Partition leader address: http://127.0.0.1:' + str(self.port) + '/')
-            # initiate flask app and HTTP requests
-            threading.Thread(
-                target=lambda: self.app.run(port=self.port, host="0.0.0.0", debug=True, use_reloader=False)).start()
         else:
             self.lock.release()
         self.candidates_id.clear()
@@ -225,8 +261,45 @@ class ServerCommunication:
                     self.lock.release()
                     self.partition_leader_exists = False
                 else:
+                    self.partition_leader_exists = True
                     self.lock.release()
                 self.partition_leader_checked = False
             else:
                 self.lock.release()
             sleep(self.heartbeat)
+
+    def start_synchronisation(self):
+        while True:
+            sleep(self.heartbeat * 5)
+            self.lock.acquire()
+            if self.is_partition_leader:
+                logging.info(f'Starting synchronization...')
+                self.lock.release()
+                self.synchronize_data_location()
+                for port in self.tcp_ports_to_send:
+                    data = {"sync": True, "port": self.tcp_port, "storage": self.storage.storage}
+                    self.establish_tcp_connection(data, port)
+            else:
+                self.lock.release()
+
+    def synchronize_data_location(self):
+        for port in self.tcp_ports_to_send:
+            data = {"data_location": self.data_location}
+            threading.Thread(target=self.establish_tcp_connection, args=(data, port)).start()
+
+    def synchronize_data(self, data):
+        port = data["port"]
+        received_data = data["storage"]
+        for key in self.data_location:
+            logging.info(f'Synchronizing data...')
+            if port in self.data_location[key] and self.tcp_port in self.data_location[key] and port in self.used_keys:
+                self.lock.acquire()
+                if received_data[key]["time"] > self.storage.storage[int(key)]["time"]:
+                    self.storage.storage[int(key)].clear()
+                    self.storage.storage[int(key)] = deepcopy(received_data[key])
+                    self.lock.release()
+                elif key not in received_data and int(key) in self.storage.storage:
+                    self.storage.storage.pop(int(key))
+                    self.lock.release()
+                else:
+                    self.lock.release()

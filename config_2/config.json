@@ -13,5 +13,9 @@
   "tcp_ports_to_send" : [
                       5010,
                       5011
-                    ]
+                    ],
+  "addresses": {
+    "0": "http://distributed_database-data-store-1:8000",
+    "1": "http://distributed_database-data-store-1-1:8001"
+  }
 }

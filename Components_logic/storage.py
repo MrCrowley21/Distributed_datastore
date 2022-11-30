@@ -1,4 +1,5 @@
 import logging
+import time
 import threading
 
 
@@ -15,7 +16,7 @@ class Storage:
     def __create_update_data(self, data, logging_info):
         # commit modifications
         key = data['key']
-        self.storage[key] = data['data']
+        self.storage[key] = {"data": data['data'], "time": time.time()}
         logging.info(f'{logging_info} Current stored data:\n{self.storage}')
 
     # create data in data storage
@@ -31,11 +32,12 @@ class Storage:
         self.__create_update_data(data, logging_info)
 
     # get data request
-    def get_data(self, key):
+    def get_data(self, data):
         # in ase data exists
         try:
+            key = data["key"]
             logging.info(f'Giving data to user...')
-            return self.storage[key]
+            return self.storage[key]["data"]
         # in case no such data
         except KeyError:
             logging.info('Not such data registered')
