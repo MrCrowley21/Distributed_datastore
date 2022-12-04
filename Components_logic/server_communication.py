@@ -2,11 +2,14 @@ import socket
 import logging
 import random
 import threading
+from io import BytesIO
 from threading import Lock
 from time import sleep
 from copy import deepcopy
 import json
 from json import load, loads, dumps
+import tempfile
+from ftplib import FTP
 
 from Components_logic.config import Config
 from Components_logic.storage import Storage
@@ -37,6 +40,9 @@ class ServerCommunication:
                                      self.tcp_ports_to_send]  # the number of registrations contained in each server
         self.server_registrations.append([self.tcp_port, 0])
         self.used_keys = []  # list of keys that are not available
+        self.ftp = FTP('ftp.us.debian.org')
+        self.ftp.login()
+        self.ftp.cwd('debian')
 
     # send data through UDP
     def send_udp_data(self, data, udp_to_send):
@@ -303,3 +309,15 @@ class ServerCommunication:
                     self.lock.release()
                 else:
                     self.lock.release()
+
+    def create_user_report(self):
+        temp_file = tempfile.NamedTemporaryFile(mode='w+')
+        with temp_file:
+            self.lock.acquire()
+            json.dump(self.storage.storage, temp_file)
+            temp_file.flush()
+            self.lock.release()
+            temp_file.seek(0)
+            data = temp_file.read()
+            self.ftp.storbinary(f'STOR {temp_file.name}', data)
+        return temp_file.name
